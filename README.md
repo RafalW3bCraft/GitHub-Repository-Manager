@@ -1,11 +1,3 @@
-<<<<<<< HEAD
-# git-master-init
-The 'Git-master-init' repository is an initial phase Git toolset aimed at simplifying and optimizing developers' workflow. Its focus on automation and a unified CLI interface for repository management promises enhanced productivity and efficiency. Developers can expect a powerful set of features to manage Git repositories, even in this early stage.
-=======
-<<<<<<< HEAD
-# git-master-init
-The 'Git-master-init' repository is an initial phase Git toolset aimed at simplifying and optimizing developers' workflow. Its focus on automation and a unified CLI interface for repository management promises enhanced productivity and efficiency. Developers can expect a powerful set of features to manage Git repositories, even in this early stage.
-=======
 To create a Python script that automatically commits changes to a Git repository each time Kali Linux starts:
 
 1. A **Python script** to perform the Git commit.
@@ -123,5 +115,3 @@ After rebooting (or starting the service manually), check if the script committe
 ```bash
 git log -1
 ```
->>>>>>> 1543a2e (initialization mode)
->>>>>>> 2d99eae (initialization mod)
