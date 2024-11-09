@@ -4,7 +4,7 @@ import subprocess
 from datetime import datetime
 
 # Local path to the Git repository
-REPO_PATH = "/home/rafal/Downloads/test/git-private"  # Use this exact path
+REPO_PATH = "/home/rafal/Downloads/test/git-private/git-master-resp"  # Update this to your path
 
 def git_commit_push():
     os.chdir(REPO_PATH)
@@ -20,8 +20,8 @@ def git_commit_push():
     commit_message = f"Auto commit on startup: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
     subprocess.run(["git", "commit", "-m", commit_message])
 
-    # Push changes to the remote repository
-    subprocess.run(["git", "push", "origin", "master"])
+    # Push changes to the correct branch (main instead of master)
+    subprocess.run(["git", "push", "origin", "main"])
 
     print("Changes committed and pushed.")
 
