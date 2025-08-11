@@ -1,0 +1,8 @@
+# Unfollow List
+# Users to unfollow - one username per line
+# Lines starting with # are comments
+
+# Example entries:
+# inactive_user
+# spam_account
+# old_follow

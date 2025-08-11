@@ -1,0 +1,8 @@
+# Follow List
+# Users to follow - one username per line
+# Lines starting with # are comments
+
+# Example entries:
+# octocat
+# github
+# example_user

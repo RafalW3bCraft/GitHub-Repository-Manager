@@ -1,0 +1,9 @@
+# Whitelist - Protected Users
+# Users who should never be unfollowed
+# One username per line, lines starting with # are comments
+
+# Important accounts to protect:
+# github
+# octocat
+# your_mentor
+# important_collaborator

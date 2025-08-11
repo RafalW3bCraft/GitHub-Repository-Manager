@@ -1,0 +1,16 @@
+[project]
+name = "github-repository-manager"
+version = "1.0.0"
+description = "Command-line tool for managing GitHub repository visibility and settings in bulk operations"
+license = {text = "MIT"}
+authors = [
+    {name = "RafalW3bCraft", email = "contact@rafalw3bcraft.dev"}
+]
+keywords = ["github", "repository", "management", "visibility", "bulk-operations"]
+requires-python = ">=3.11"
+dependencies = [
+    "colorama>=0.4.6",
+    "cryptography>=45.0.6",
+    "requests>=2.32.4",
+    "tqdm>=4.67.1",
+]
