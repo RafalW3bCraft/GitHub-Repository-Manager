@@ -4,7 +4,7 @@ version = "1.0.0"
 description = "Command-line tool for managing GitHub repository visibility and settings in bulk operations"
 license = {text = "MIT"}
 authors = [
-    {name = "RafalW3bCraft", email = "contact@rafalw3bcraft.dev"}
+    {name = "RafalW3bCraft", email = "thewhitefalcon13@proton.me"}
 ]
 keywords = ["github", "repository", "management", "visibility", "bulk-operations"]
 requires-python = ">=3.11"
