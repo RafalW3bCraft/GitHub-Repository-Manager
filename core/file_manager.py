@@ -1,10 +1,12 @@
 """
-File management utilities for GitHub Automation Suite
+File management utilities for Github-Repository-Manager
 """
 
 import os
 import json
 import csv
+import asyncio
+import aiofiles
 from pathlib import Path
 from typing import List, Dict, Any, Optional
 from datetime import datetime
@@ -27,7 +29,7 @@ class FileManager:
         for directory in [self.data_dir, self.logs_dir, self.backups_dir]:
             directory.mkdir(exist_ok=True)
     
-    def load_user_list(self, file_path: str) -> List[str]:
+    async def load_user_list(self, file_path: str) -> List[str]:
         """Load list of usernames from file"""
         path = Path(file_path)
         
@@ -36,9 +38,9 @@ class FileManager:
             return []
         
         try:
-            with open(path, 'r', encoding='utf-8') as f:
+            async with aiofiles.open(path, 'r', encoding='utf-8') as f:
                 usernames = []
-                for line in f:
+                async for line in f:
                     username = line.strip()
                     if username and not username.startswith('#'):
                         usernames.append(username)
@@ -50,7 +52,7 @@ class FileManager:
             self.logger.error(f"Error loading user list from {file_path}: {e}")
             return []
     
-    def save_user_list(self, usernames: List[str], file_path: str, 
+    async def save_user_list(self, usernames: List[str], file_path: str, 
                       append: bool = False) -> bool:
         """Save list of usernames to file"""
         path = Path(file_path)
@@ -60,11 +62,11 @@ class FileManager:
             path.parent.mkdir(parents=True, exist_ok=True)
             
             mode = 'a' if append else 'w'
-            with open(path, mode, encoding='utf-8') as f:
+            async with aiofiles.open(path, mode, encoding='utf-8') as f:
                 if append:
-                    f.write('\n')
+                    await f.write('\n')
                 for username in usernames:
-                    f.write(f"{username}\n")
+                    await f.write(f"{username}\n")
             
             action = "appended to" if append else "saved to"
             self.logger.info(f"Successfully {action} {len(usernames)} usernames to {file_path}")
@@ -74,7 +76,7 @@ class FileManager:
             self.logger.error(f"Error saving user list to {file_path}: {e}")
             return False
     
-    def load_json_data(self, file_path: str) -> Optional[Dict[str, Any]]:
+    async def load_json_data(self, file_path: str) -> Optional[Dict[str, Any]]:
         """Load JSON data from file"""
         path = Path(file_path)
         
@@ -82,8 +84,9 @@ class FileManager:
             return None
         
         try:
-            with open(path, 'r', encoding='utf-8') as f:
-                data = json.load(f)
+            async with aiofiles.open(path, 'r', encoding='utf-8') as f:
+                content = await f.read()
+                data = json.loads(content)
             
             self.logger.debug(f"Loaded JSON data from {file_path}")
             return data
@@ -92,7 +95,7 @@ class FileManager:
             self.logger.error(f"Error loading JSON data from {file_path}: {e}")
             return None
     
-    def save_json_data(self, data: Dict[str, Any], file_path: str) -> bool:
+    async def save_json_data(self, data: Dict[str, Any], file_path: str) -> bool:
         """Save data as JSON to file"""
         path = Path(file_path)
         
@@ -100,8 +103,9 @@ class FileManager:
             # Create directory if it doesn't exist
             path.parent.mkdir(parents=True, exist_ok=True)
             
-            with open(path, 'w', encoding='utf-8') as f:
-                json.dump(data, f, indent=2, ensure_ascii=False)
+            json_content = json.dumps(data, indent=2, ensure_ascii=False)
+            async with aiofiles.open(path, 'w', encoding='utf-8') as f:
+                await f.write(json_content)
             
             self.logger.debug(f"Saved JSON data to {file_path}")
             return True
@@ -110,7 +114,7 @@ class FileManager:
             self.logger.error(f"Error saving JSON data to {file_path}: {e}")
             return False
     
-    def create_backup(self, follow_data: Dict[str, Any], 
+    async def create_backup(self, follow_data: Dict[str, Any], 
                      backup_name: Optional[str] = None) -> str:
         """Create backup of current follow/follower state"""
         if not backup_name:
@@ -135,18 +139,19 @@ class FileManager:
                 json_data = json.dumps(backup_data, indent=2)
                 encrypted_data = fernet.encrypt(json_data.encode())
                 
-                with open(backup_path, 'wb') as f:
-                    f.write(encrypted_data)
+                async with aiofiles.open(backup_path, 'wb') as f:
+                    await f.write(encrypted_data)
                 
                 # Save key separately
                 key_path = backup_path.with_suffix('.key')
-                with open(key_path, 'wb') as f:
-                    f.write(key)
+                async with aiofiles.open(key_path, 'wb') as f:
+                    await f.write(key)
                 
                 self.logger.info(f"Created encrypted backup: {backup_path}")
             else:
-                with open(backup_path, 'w', encoding='utf-8') as f:
-                    json.dump(backup_data, f, indent=2, ensure_ascii=False)
+                json_content = json.dumps(backup_data, indent=2, ensure_ascii=False)
+                async with aiofiles.open(backup_path, 'w', encoding='utf-8') as f:
+                    await f.write(json_content)
                 
                 self.logger.info(f"Created backup: {backup_path}")
             
@@ -156,7 +161,7 @@ class FileManager:
             self.logger.error(f"Error creating backup: {e}")
             return ""
     
-    def restore_backup(self, backup_path: str) -> Optional[Dict[str, Any]]:
+    async def restore_backup(self, backup_path: str) -> Optional[Dict[str, Any]]:
         """Restore from backup file"""
         path = Path(backup_path)
         
@@ -169,13 +174,13 @@ class FileManager:
                 # Try to find corresponding key file
                 key_path = path.with_suffix('.key')
                 if key_path.exists():
-                    with open(key_path, 'rb') as f:
-                        key = f.read()
+                    async with aiofiles.open(key_path, 'rb') as f:
+                        key = await f.read()
                     
                     fernet = Fernet(key)
                     
-                    with open(path, 'rb') as f:
-                        encrypted_data = f.read()
+                    async with aiofiles.open(path, 'rb') as f:
+                        encrypted_data = await f.read()
                     
                     decrypted_data = fernet.decrypt(encrypted_data)
                     backup_data = json.loads(decrypted_data.decode())
@@ -183,8 +188,9 @@ class FileManager:
                     self.logger.error(f"Encryption key not found for {backup_path}")
                     return None
             else:
-                with open(path, 'r', encoding='utf-8') as f:
-                    backup_data = json.load(f)
+                async with aiofiles.open(path, 'r', encoding='utf-8') as f:
+                    content = await f.read()
+                    backup_data = json.loads(content)
             
             self.logger.info(f"Restored backup from {backup_path}")
             return backup_data.get('data', backup_data)
@@ -193,7 +199,7 @@ class FileManager:
             self.logger.error(f"Error restoring backup from {backup_path}: {e}")
             return None
     
-    def list_backups(self) -> List[Dict[str, str]]:
+    async def list_backups(self) -> List[Dict[str, str]]:
         """List available backup files"""
         backups = []
         
@@ -217,7 +223,7 @@ class FileManager:
             self.logger.error(f"Error listing backups: {e}")
             return []
     
-    def cleanup_old_backups(self, retention_days: int = 30) -> int:
+    async def cleanup_old_backups(self, retention_days: int = 30) -> int:
         """Clean up old backup files"""
         if retention_days <= 0:
             return 0
@@ -247,7 +253,7 @@ class FileManager:
             self.logger.error(f"Error cleaning up old backups: {e}")
             return 0
     
-    def export_to_csv(self, data: List[Dict[str, Any]], file_path: str) -> bool:
+    async def export_to_csv(self, data: List[Dict[str, Any]], file_path: str) -> bool:
         """Export data to CSV format"""
         if not data:
             self.logger.warning("No data to export")
@@ -258,10 +264,17 @@ class FileManager:
         try:
             path.parent.mkdir(parents=True, exist_ok=True)
             
-            with open(path, 'w', newline='', encoding='utf-8') as f:
-                writer = csv.DictWriter(f, fieldnames=data[0].keys())
-                writer.writeheader()
-                writer.writerows(data)
+            # Create CSV content in memory
+            import io
+            output = io.StringIO()
+            writer = csv.DictWriter(output, fieldnames=data[0].keys())
+            writer.writeheader()
+            writer.writerows(data)
+            csv_content = output.getvalue()
+            output.close()
+            
+            async with aiofiles.open(path, 'w', encoding='utf-8') as f:
+                await f.write(csv_content)
             
             self.logger.info(f"Exported {len(data)} records to {file_path}")
             return True
@@ -270,7 +283,7 @@ class FileManager:
             self.logger.error(f"Error exporting to CSV: {e}")
             return False
     
-    def ensure_data_files_exist(self):
+    async def ensure_data_files_exist(self):
         """Create default data files if they don't exist"""
         default_files = {
             'follow_list.txt': [
@@ -295,8 +308,8 @@ class FileManager:
             file_path = self.data_dir / filename
             if not file_path.exists():
                 try:
-                    with open(file_path, 'w', encoding='utf-8') as f:
-                        f.write('\n'.join(content))
+                    async with aiofiles.open(file_path, 'w', encoding='utf-8') as f:
+                        await f.write('\n'.join(content))
                     self.logger.debug(f"Created default file: {file_path}")
                 except Exception as e:
                     self.logger.error(f"Error creating default file {file_path}: {e}")

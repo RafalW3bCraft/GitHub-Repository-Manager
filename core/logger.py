@@ -1,5 +1,5 @@
 """
-Logging configuration for GitHub Automation Suite
+Logging configuration for Github-Repository-Manager
 """
 
 import logging
@@ -10,7 +10,7 @@ from typing import Optional
 import sys
 
 class Logger:
-    """Simplified logging for GitHub Automation Suite"""
+    """Simplified logging for Github-Repository-Manager"""
     
     def __init__(self, name: str = "github_automation"):
         self.name = name

@@ -1,0 +1,2 @@
+# Add usernames to unfollow, one per line
+# Lines starting with # are comments
