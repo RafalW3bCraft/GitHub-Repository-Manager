@@ -1,12 +1,13 @@
 #!/usr/bin/env python3
 """
-GitHub Automation Suite - Enhanced CLI tool for GitHub follow/unfollow operations
-Extends gitMaster-init with advanced automation capabilities
+Github-Repository-Manager - Enhanced CLI tool for GitHub follow/unfollow operations
+Extends Github-Repository-Manager with advanced automation capabilities
 """
 
 import sys
 import os
 import argparse
+import asyncio
 from pathlib import Path
 from typing import Optional, List
 import colorama
@@ -35,15 +36,17 @@ class GitHubAutomation:
         self.github_api: Optional[GitHubAPI] = None
         self.commands: Optional[Commands] = None
         
-    def initialize_api(self) -> bool:
+    async def initialize_api(self) -> bool:
         """Initialize GitHub API connection with validation"""
         try:
             self.github_api = GitHubAPI()
-            if not self.github_api.validate_token():
+            if not await self.github_api.validate_token():
                 self.logger.error("GitHub token validation failed")
                 return False
             
             self.commands = Commands(self.github_api, self.file_manager, self.logger)
+            # Ensure data files exist
+            await self.file_manager.ensure_data_files_exist()
             self.logger.info("GitHub API initialized successfully")
             return True
             
@@ -54,20 +57,22 @@ class GitHubAutomation:
     def create_parser(self) -> argparse.ArgumentParser:
         """Create comprehensive argument parser with subcommands"""
         parser = argparse.ArgumentParser(
-            description="gitMaster-init v1.0.0 - Advanced GitHub Repository Management by RafalW3bCraft",
+            description="Github-Repository-Manager v1.0.0 - Advanced GitHub Repository Management by RafalW3bCraft",
             formatter_class=argparse.RawDescriptionHelpFormatter,
             epilog="""
-GitMaster-init Unified Examples:
+Github-Repository-Manager Unified Examples:
   # Repository Management
   %(prog)s repo-manager                          # Interactive repository selection
   %(prog)s repo-manager --make-private           # Bulk make repositories private
   %(prog)s repo-manager --make-public            # Bulk make repositories public
   %(prog)s repo-manager --filter public          # Show only public repositories
   %(prog)s repo-manager --toggle-visibility      # Toggle repository visibility
+  %(prog)s repo-manager --persistent             # Keep running until exit/Ctrl+C
   
   # Automation (All via repo-manager)
   %(prog)s repo-manager --auto-follow octocat --limit 50
   %(prog)s repo-manager --unfollow-nonfollowers --whitelist data/whitelist.txt
+  %(prog)s repo-manager --follow-back --follow-back-limit 50
   %(prog)s repo-manager --stats --stats-username octocat
   %(prog)s repo-manager --interactive
   %(prog)s repo-manager --backup-create
@@ -75,7 +80,7 @@ GitMaster-init Unified Examples:
   # Debug & Diagnostics
   %(prog)s repo-manager --debug                  # Debug repository access
 
-Author: RafalW3bCraft | License: MIT | GitHub: RafalW3bCraft/gitMaster-init
+Author: RafalW3bCraft | License: MIT | GitHub: RafalW3bCraft/Github-Repository-Manager
             """
         )
         
@@ -89,9 +94,9 @@ Author: RafalW3bCraft | License: MIT | GitHub: RafalW3bCraft/gitMaster-init
         # Create subparsers for different commands
         subparsers = parser.add_subparsers(dest='command', help='Available commands')
         
-        # GitMaster-init Unified Repository Management Command
+        # Github-Repository-Manager Unified Repository Management Command
         repo_parser = subparsers.add_parser('repo-manager',
-                                          help='GitMaster-init: Unified repository and automation management')
+                                          help='Github-Repository-Manager: Unified repository and automation management')
         
         # Repository visibility management options
         repo_visibility = repo_parser.add_argument_group('Repository Visibility Management')
@@ -117,6 +122,10 @@ Author: RafalW3bCraft | License: MIT | GitHub: RafalW3bCraft/gitMaster-init
         
         automation.add_argument('--unfollow-nonfollowers', action='store_true',
                               help='Unfollow users who don\'t follow back')
+        automation.add_argument('--follow-back', action='store_true',
+                              help='Follow back your followers who you haven\'t followed yet')
+        automation.add_argument('--follow-back-limit', type=int, default=100,
+                              help='Maximum users to follow back (default: 100)')
         automation.add_argument('--whitelist', type=str,
                               help='Path to whitelist file (users to never unfollow)')
         automation.add_argument('--min-days', type=int, default=7,
@@ -146,6 +155,11 @@ Author: RafalW3bCraft | License: MIT | GitHub: RafalW3bCraft/gitMaster-init
         debug.add_argument('--debug', action='store_true',
                          help='Debug repository access and GitHub API permissions')
         
+        # Session control
+        session = repo_parser.add_argument_group('Session Control')
+        session.add_argument('--persistent', action='store_true',
+                           help='Keep running in a loop until exit command or Ctrl+C')
+        
         # Legacy compatibility (deprecated - redirect to repo-manager)
         legacy_parser = subparsers.add_parser('legacy-bulk-private',
                                             help='DEPRECATED: Use "repo-manager" instead')
@@ -156,7 +170,7 @@ Author: RafalW3bCraft | License: MIT | GitHub: RafalW3bCraft/gitMaster-init
         
         return parser
     
-    def run(self):
+    async def run(self):
         """Main application entry point"""
         parser = self.create_parser()
         args = parser.parse_args()
@@ -171,7 +185,7 @@ Author: RafalW3bCraft | License: MIT | GitHub: RafalW3bCraft/gitMaster-init
             self.logger.set_level('DEBUG')
         
         # Initialize API connection
-        if not self.initialize_api():
+        if not await self.initialize_api():
             print(f"{Fore.RED}Failed to initialize GitHub API. Check your token and connection.{Style.RESET_ALL}")
             return 1
         
@@ -183,14 +197,14 @@ Author: RafalW3bCraft | License: MIT | GitHub: RafalW3bCraft/gitMaster-init
             
             # Route to unified repo-manager command handler
             if args.command == 'repo-manager':
-                return self._handle_unified_repo_manager(args)
+                return await self._handle_unified_repo_manager(args)
             
             elif args.command == 'legacy-bulk-private':
                 print(f"{Fore.YELLOW}WARNING: 'legacy-bulk-private' is deprecated. Use 'repo-manager' instead.{Style.RESET_ALL}")
-                return self.commands.run_legacy_bulk_private()
+                return await self.commands.run_legacy_bulk_private()
             
             elif args.command == 'debug':
-                return self.commands.debug_repository_access()
+                return await self.commands.debug_repository_access()
             
             else:
                 parser.print_help()
@@ -203,8 +217,12 @@ Author: RafalW3bCraft | License: MIT | GitHub: RafalW3bCraft/gitMaster-init
             self.logger.error(f"Unexpected error: {e}")
             print(f"{Fore.RED}An unexpected error occurred. Check logs for details.{Style.RESET_ALL}")
             return 1
+        finally:
+            # Clean up resources
+            if self.github_api:
+                await self.github_api.close()
     
-    def _handle_unified_repo_manager(self, args) -> int:
+    async def _handle_unified_repo_manager(self, args) -> int:
         """Handle unified repo-manager command with all automation features"""
         # Determine which operation to perform based on provided arguments
         operations_count = 0
@@ -221,6 +239,8 @@ Author: RafalW3bCraft | License: MIT | GitHub: RafalW3bCraft/gitMaster-init
         if args.auto_follow:
             operations_count += 1
         if args.unfollow_nonfollowers:
+            operations_count += 1
+        if args.follow_back:
             operations_count += 1
         if args.stats:
             operations_count += 1
@@ -239,6 +259,10 @@ Author: RafalW3bCraft | License: MIT | GitHub: RafalW3bCraft/gitMaster-init
         if args.debug:
             operations_count += 1
         
+        # Check persistent mode
+        if args.persistent:
+            operations_count += 1
+        
         # If multiple operations specified, show error
         if operations_count > 1:
             print(f"{Fore.RED}Error: Only one operation can be performed at a time{Style.RESET_ALL}")
@@ -250,7 +274,7 @@ Author: RafalW3bCraft | License: MIT | GitHub: RafalW3bCraft/gitMaster-init
             if not self.commands:
                 print(f"{Fore.RED}Commands not properly initialized{Style.RESET_ALL}")
                 return 1
-            return self.commands.repository_manager(
+            return await self.commands.repository_manager(
                 make_private=False,
                 make_public=False,
                 filter_type=args.filter
@@ -265,57 +289,64 @@ Author: RafalW3bCraft | License: MIT | GitHub: RafalW3bCraft/gitMaster-init
             
             # Repository visibility operations
             if args.make_private:
-                return self.commands.repository_manager(
+                return await self.commands.repository_manager(
                     make_private=True,
                     make_public=False,
                     filter_type=args.filter
                 )
             
             elif args.make_public:
-                return self.commands.repository_manager(
+                return await self.commands.repository_manager(
                     make_private=False,
                     make_public=True,
                     filter_type=args.filter
                 )
             
             elif args.toggle_visibility:
-                return self.commands.toggle_repositories_visibility(args.filter)
+                return await self.commands.toggle_repositories_visibility(args.filter)
             
             # Automation operations
             elif args.auto_follow:
-                return self.commands.auto_follow_followers(
+                return await self.commands.auto_follow_followers(
                     args.auto_follow, args.limit, args.filter_verified,
                     args.min_followers
                 )
             
             elif args.unfollow_nonfollowers:
-                return self.commands.unfollow_non_followers(
+                return await self.commands.unfollow_non_followers(
                     args.whitelist, args.min_days, args.no_confirm
                 )
             
+            elif args.follow_back:
+                return await self.commands.follow_back_followers(args.follow_back_limit)
+            
             elif args.stats:
-                return self.commands.show_statistics(args.stats_username, args.detailed)
+                return await self.commands.show_statistics(args.stats_username, args.detailed)
             
             elif args.interactive:
                 if not self.github_api:
                     print(f"{Fore.RED}GitHub API not initialized{Style.RESET_ALL}")
                     return 1
                 interactive = InteractiveMode(self.github_api, self.file_manager, self.logger)
-                return interactive.start()
+                return await interactive.start()
             
             # Backup operations
             elif args.backup_create:
-                return self.commands.create_backup()
+                return await self.commands.create_backup()
             
             elif args.backup_restore:
-                return self.commands.restore_backup(args.backup_restore)
+                return await self.commands.restore_backup(args.backup_restore)
             
             elif args.backup_list:
-                return self.commands.list_backups()
+                return await self.commands.list_backups()
             
             # Debug operation
             elif args.debug:
-                return self.commands.debug_repository_access()
+                return await self.commands.debug_repository_access()
+            
+            # Persistent mode
+            elif args.persistent:
+                return await self._start_persistent_mode(args)
             
             else:
                 # This should not happen due to operations_count check above
@@ -326,11 +357,87 @@ Author: RafalW3bCraft | License: MIT | GitHub: RafalW3bCraft/gitMaster-init
             self.logger.error(f"Error in repo-manager operation: {e}")
             print(f"{Fore.RED}Operation failed. Check logs for details.{Style.RESET_ALL}")
             return 1
+    
+    async def _start_persistent_mode(self, args) -> int:
+        """Start persistent mode that runs repository manager in a loop"""
+        print(f"{Fore.CYAN}╔══════════════════════════════════════════════════════════════╗{Style.RESET_ALL}")
+        print(f"{Fore.CYAN}║              Github-Repository-Manager               ║{Style.RESET_ALL}")
+        print(f"{Fore.CYAN}║                  by RafalW3bCraft                          ║{Style.RESET_ALL}")
+        print(f"{Fore.CYAN}╚══════════════════════════════════════════════════════════════╝{Style.RESET_ALL}")
+        print()
+        print(f"{Fore.GREEN}🚀 Persistent mode activated!{Style.RESET_ALL}")
+        print(f"{Fore.YELLOW}The repository manager will keep running until you type 'exit', 'quit', or press Ctrl+C{Style.RESET_ALL}")
+        print(f"{Fore.CYAN}Filter: {args.filter} repositories{Style.RESET_ALL}")
+        print()
+        print(f"{Fore.GREEN}💡 Tips:{Style.RESET_ALL}")
+        print("  • Each session lets you select and modify repositories")
+        print("  • After each operation, you can choose to continue or exit")
+        print("  • Use 'quit' or 'exit' in any selection to cancel the current operation")
+        print()
+        
+        session_count = 0
+        
+        while True:
+            try:
+                session_count += 1
+                print(f"{Fore.MAGENTA}─── Session {session_count} ───{Style.RESET_ALL}")
+                print()
+                
+                # Run the repository manager
+                if not self.commands:
+                    print(f"{Fore.RED}Commands not properly initialized{Style.RESET_ALL}")
+                    return 1
+                
+                result = await self.commands.repository_manager(
+                    make_private=False,
+                    make_public=False,
+                    filter_type=args.filter
+                )
+                
+                # Check if user wants to continue
+                print()
+                print(f"{Fore.CYAN}─── Session {session_count} Complete ───{Style.RESET_ALL}")
+                print(f"{Fore.YELLOW}Options:{Style.RESET_ALL}")
+                print("  • Press Enter to start another session")
+                print("  • Type 'exit' or 'quit' to stop")
+                print("  • Press Ctrl+C to force quit")
+                print()
+                
+                user_input = input(f"{Fore.CYAN}Continue? (Enter/exit/quit): {Style.RESET_ALL}").strip().lower()
+                
+                if user_input in ['exit', 'quit', 'q']:
+                    print(f"{Fore.YELLOW}Exiting persistent mode. Goodbye!{Style.RESET_ALL}")
+                    return 0
+                elif user_input == '':
+                    print(f"{Fore.GREEN}Starting new session...{Style.RESET_ALL}")
+                    print()
+                    continue
+                else:
+                    print(f"{Fore.GREEN}Starting new session...{Style.RESET_ALL}")
+                    print()
+                    continue
+                    
+            except KeyboardInterrupt:
+                print(f"\n{Fore.YELLOW}Ctrl+C detected. Exiting persistent mode...{Style.RESET_ALL}")
+                return 130
+            except Exception as e:
+                self.logger.error(f"Error in persistent mode session {session_count}: {e}")
+                print(f"{Fore.RED}Session {session_count} failed: {e}{Style.RESET_ALL}")
+                
+                # Ask if user wants to continue after error
+                try:
+                    continue_after_error = input(f"{Fore.YELLOW}Continue despite error? (y/N): {Style.RESET_ALL}").strip().lower()
+                    if continue_after_error not in ['y', 'yes']:
+                        print(f"{Fore.YELLOW}Exiting due to error. Goodbye!{Style.RESET_ALL}")
+                        return 1
+                except KeyboardInterrupt:
+                    print(f"\n{Fore.YELLOW}Ctrl+C detected. Exiting persistent mode...{Style.RESET_ALL}")
+                    return 130
 
-def main():
+async def main():
     """Entry point for the application"""
     app = GitHubAutomation()
-    return app.run()
+    return await app.run()
 
 if __name__ == "__main__":
-    sys.exit(main())
+    sys.exit(asyncio.run(main()))

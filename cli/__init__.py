@@ -1,3 +1,3 @@
 """
-CLI modules for GitHub Automation Suite
+CLI modules for Github-Repository-Manager
 """

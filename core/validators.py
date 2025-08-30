@@ -1,5 +1,5 @@
 """
-Validation utilities for GitHub Automation Suite
+Validation utilities for Github-Repository-Manager
 """
 
 import re
@@ -35,7 +35,7 @@ class Validators:
         
         return True
     
-    def validate_usernames(self, usernames: List[str]) -> List[str]:
+    async def validate_usernames(self, usernames: List[str]) -> List[str]:
         """Validate list of usernames and return valid ones"""
         valid_usernames = []
         invalid_count = 0
@@ -53,7 +53,7 @@ class Validators:
         
         return valid_usernames
     
-    def validate_file_path(self, file_path: str) -> bool:
+    async def validate_file_path(self, file_path: str) -> bool:
         """Validate file path exists and is readable"""
         try:
             path = Path(file_path)
@@ -88,8 +88,8 @@ class Validators:
         return sanitized
     
     def validate_delay_range(self, delay: int, min_delay: int = 1, max_delay: int = 60) -> bool:
-        """Validate delay is within reasonable range"""
-        return isinstance(delay, int) and min_delay <= delay <= max_delay
+        """No delay validation - all delays removed for follow/unfollow operations"""
+        return True
     
     def validate_api_response(self, response_data: Dict[str, Any], 
                             required_fields: List[str]) -> bool:
@@ -121,17 +121,7 @@ class Validators:
         return False
     
     def validate_operation_limits(self, operation: str, count: int) -> bool:
-        """Validate operation limits to prevent abuse"""
-        limits = {
-            'follow': 1000,      # Max follows per operation
-            'unfollow': 1000,    # Max unfollows per operation
-            'auto_follow': 500,  # Max auto-follows per operation
-        }
-        
-        limit = limits.get(operation, 100)
-        
-        if count > limit:
-            self.logger.error(f"Operation {operation} exceeds limit of {limit} (requested: {count})")
-            return False
-        
+        """No operation limits - all follow/unfollow operations allowed"""
+        # Rate limits purged - no restrictions on follow/unfollow operations
+        self.logger.info(f"Operation {operation} with {count} items - no limits enforced")
         return True

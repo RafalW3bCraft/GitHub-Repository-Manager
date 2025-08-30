@@ -1,6 +1,6 @@
 """
-Core modules for GitHub Automation Suite
+Core modules for Github-Repository-Manager
 """
 
 __version__ = "2.0.0"
-__author__ = "GitHub Automation Suite"
+__author__ = "RafalW3bCraft"
