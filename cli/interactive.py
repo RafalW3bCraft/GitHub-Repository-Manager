@@ -4,6 +4,7 @@ Interactive mode for Github-Repository-Manager
 
 import os
 import asyncio
+from datetime import datetime
 from typing import Optional, List, Dict, Any
 
 import colorama
@@ -13,6 +14,7 @@ from core.github_api import GitHubAPI
 from core.file_manager import FileManager
 from core.logger import Logger
 from cli.commands import Commands
+from core.activity_generator import GitHubActivityGenerator
 
 class InteractiveMode:
     """Interactive command-line interface"""
@@ -82,6 +84,10 @@ class InteractiveMode:
             await self._interactive_clone_repo(parts[1:])
         elif cmd == 'users':
             await self._interactive_search_users(parts[1:])
+        elif cmd == 'generate-activity':
+            await self._generate_activity(parts[1:])
+        elif cmd == 'activity-status':
+            await self._activity_status()
         elif cmd == 'clear':
             os.system('clear' if os.name == 'posix' else 'cls')
         else:
@@ -121,6 +127,10 @@ class InteractiveMode:
   restore [backup_file]   Restore from backup file
   list backups            List available backups
   list files              List data files
+
+{Fore.GREEN}Activity Generation:{Style.RESET_ALL}
+  generate-activity       Generate GitHub activity history
+  activity-status         Show activity generation status
 
 {Fore.YELLOW}Examples:{Style.RESET_ALL}
   follow octocat
@@ -515,3 +525,112 @@ class InteractiveMode:
             print(f"{Fore.RED}Invalid number input{Style.RESET_ALL}")
         except Exception as e:
             print(f"{Fore.RED}Error in user search: {e}{Style.RESET_ALL}")
+    
+    async def _generate_activity(self, args: List[str]):
+        """Interactive GitHub activity generation"""
+        try:
+            print(f"\n{Fore.CYAN}=== GitHub Activity Generator ==={Style.RESET_ALL}")
+            
+            # Initialize activity generator
+            generator = GitHubActivityGenerator(self.github_api, self.logger)
+            
+            # Get account creation date automatically
+            account_creation_date = await generator.get_account_creation_date()
+            print(f"Account created: {Fore.GREEN}{account_creation_date}{Style.RESET_ALL}")
+            
+            # Allow manual date input with smart defaults
+            today = datetime.now().strftime('%Y-%m-%d')
+            
+            start_date_input = input(f"{Fore.CYAN}Start date [{account_creation_date}]: {Style.RESET_ALL}").strip()
+            start_date = start_date_input if start_date_input else account_creation_date
+            
+            end_date_input = input(f"{Fore.CYAN}End date [{today}]: {Style.RESET_ALL}").strip()
+            end_date = end_date_input if end_date_input else today
+            
+            print(f"Generating activity from {Fore.GREEN}{start_date}{Style.RESET_ALL} to {Fore.GREEN}{end_date}{Style.RESET_ALL}")
+            
+            # Only ask for maximum commits per day
+            max_commits_input = input(f"{Fore.CYAN}Maximum commits per day [10]: {Style.RESET_ALL}").strip()
+            max_commits_per_day = int(max_commits_input) if max_commits_input else 10
+            
+            # Validate inputs
+            try:
+                start_dt = datetime.strptime(start_date, "%Y-%m-%d")
+                end_dt = datetime.strptime(end_date, "%Y-%m-%d")
+                
+                if start_dt > end_dt:
+                    print(f"{Fore.RED}Error: Start date must be before end date{Style.RESET_ALL}")
+                    return
+                
+                if max_commits_per_day < 3 or max_commits_per_day > 50:
+                    print(f"{Fore.RED}Error: Maximum commits per day must be between 3 and 50{Style.RESET_ALL}")
+                    return
+                    
+            except ValueError:
+                print(f"{Fore.RED}Error: Invalid date format. Use YYYY-MM-DD{Style.RESET_ALL}")
+                return
+            
+            # Show confirmation
+            total_days = (end_dt - start_dt).days + 1
+            avg_commits = (3 + max_commits_per_day) // 2
+            estimated_commits = total_days * avg_commits
+            
+            print(f"\n{Fore.YELLOW}=== Confirmation ==={Style.RESET_ALL}")
+            print(f"Date Range: {start_date} to {end_date} ({total_days} days)")
+            print(f"Commits per day: 3 to {max_commits_per_day} (random)")
+            print(f"Estimated total commits: ~{estimated_commits:,}")
+            print(f"Repository: github_activity")
+            print(f"Mode: Real-time generation (no dry run)")
+            
+            confirm_input = input(f"\n{Fore.CYAN}Proceed with generation? (y/N): {Style.RESET_ALL}").strip().lower()
+            
+            if confirm_input == 'y':
+                success = await generator.generate_activity(
+                    start_date, end_date, max_commits_per_day, "github_activity"
+                )
+                
+                if success:
+                    print(f"\n{Fore.GREEN}Activity generation completed successfully!{Style.RESET_ALL}")
+                else:
+                    print(f"\n{Fore.RED}Activity generation failed. Check logs for details.{Style.RESET_ALL}")
+            else:
+                print(f"{Fore.YELLOW}Activity generation cancelled.{Style.RESET_ALL}")
+                
+        except ValueError as e:
+            print(f"{Fore.RED}Invalid input: {e}{Style.RESET_ALL}")
+        except Exception as e:
+            print(f"{Fore.RED}Error in activity generation: {e}{Style.RESET_ALL}")
+            self.logger.error(f"Activity generation error: {e}")
+    
+    async def _activity_status(self):
+        """Show activity generation status"""
+        try:
+            print(f"\n{Fore.CYAN}=== Activity Status ==={Style.RESET_ALL}")
+            
+            # Check if github_activity repository exists
+            response = await self.github_api._make_request('GET', f'/repos/{self.github_api.username}/github_activity')
+            
+            if response.status == 200:
+                repo_data = await response.json()
+                print(f"{Fore.GREEN}✓ Repository 'github_activity' exists{Style.RESET_ALL}")
+                print(f"URL: {repo_data.get('html_url', 'N/A')}")
+                print(f"Created: {repo_data.get('created_at', 'N/A')}")
+                print(f"Updated: {repo_data.get('updated_at', 'N/A')}")
+                print(f"Size: {repo_data.get('size', 0)} KB")
+                
+                # Get latest commit info
+                commits_response = await self.github_api._make_request('GET', f'/repos/{self.github_api.username}/github_activity/commits')
+                if commits_response.status == 200:
+                    commits_data = await commits_response.json()
+                    if commits_data:
+                        latest_commit = commits_data[0]
+                        print(f"Latest commit: {latest_commit.get('commit', {}).get('message', 'N/A')}")
+                        print(f"Commit date: {latest_commit.get('commit', {}).get('author', {}).get('date', 'N/A')}")
+                
+            else:
+                print(f"{Fore.YELLOW}Repository 'github_activity' does not exist{Style.RESET_ALL}")
+                print(f"Use 'generate-activity' to create activity history")
+                
+        except Exception as e:
+            print(f"{Fore.RED}Error checking activity status: {e}{Style.RESET_ALL}")
+            self.logger.error(f"Activity status error: {e}")
