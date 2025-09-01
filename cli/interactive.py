@@ -553,6 +553,10 @@ class InteractiveMode:
             max_commits_input = input(f"{Fore.CYAN}Maximum commits per day [10]: {Style.RESET_ALL}").strip()
             max_commits_per_day = int(max_commits_input) if max_commits_input else 10
             
+            # Ask for repository name with default
+            repo_name_input = input(f"{Fore.CYAN}Repository name [github_activity]: {Style.RESET_ALL}").strip()
+            repo_name = repo_name_input if repo_name_input else "github_activity"
+            
             # Validate inputs
             try:
                 start_dt = datetime.strptime(start_date, "%Y-%m-%d")
@@ -579,14 +583,14 @@ class InteractiveMode:
             print(f"Date Range: {start_date} to {end_date} ({total_days} days)")
             print(f"Commits per day: 3 to {max_commits_per_day} (random)")
             print(f"Estimated total commits: ~{estimated_commits:,}")
-            print(f"Repository: github_activity")
+            print(f"Repository: {Fore.GREEN}{repo_name}{Style.RESET_ALL}")
             print(f"Mode: Real-time generation (no dry run)")
             
             confirm_input = input(f"\n{Fore.CYAN}Proceed with generation? (y/N): {Style.RESET_ALL}").strip().lower()
             
             if confirm_input == 'y':
                 success = await generator.generate_activity(
-                    start_date, end_date, max_commits_per_day, "github_activity"
+                    start_date, end_date, max_commits_per_day, repo_name
                 )
                 
                 if success:
