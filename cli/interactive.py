@@ -102,7 +102,7 @@ class InteractiveMode:
 {Fore.GREEN}Follow Operations:{Style.RESET_ALL}
   follow <username>       Follow a specific user
   unfollow <username>     Unfollow a specific user
-  followback [limit]      Follow back your followers (default limit: 100)
+  followback [limit]      Follow back your followers (no limit by default)
   check <username>        Check if following/followed by user
 
 {Fore.GREEN}Bulk Operations:{Style.RESET_ALL}
@@ -138,13 +138,19 @@ class InteractiveMode:
         """Show current API and rate limit status"""
         print(f"{Fore.CYAN}=== API Status ==={Style.RESET_ALL}")
         
+        # Force fresh data for status
+        self.github_api._invalidate_cache()
+        
         # User info
         user_info = await self.github_api.get_user_info()
         if user_info:
             print(f"User: {user_info.get('name', 'N/A')} (@{user_info.get('login', 'N/A')})")
             print(f"Public Repos: {user_info.get('public_repos', 0)}")
             print(f"Followers: {user_info.get('followers', 0)}")
-            print(f"Following: {user_info.get('following', 0)}")
+            
+            # Use real-time following count with local state adjustments
+            real_time_following = await self.github_api.get_real_time_following_count()
+            print(f"Following: {real_time_following}")
         
         # Rate limit status
         rate_limit = await self.github_api.get_rate_limit_status()
@@ -162,6 +168,9 @@ class InteractiveMode:
         """Show detailed statistics"""
         # Use provided username or default to authenticated user
         username = args[0] if args else None
+        
+        # Force cache invalidation before showing stats to prevent repetitive data
+        self.github_api._invalidate_cache()
         
         # Use the proper Commands class method for consistency
         commands = Commands(self.github_api, self.file_manager, self.logger)
@@ -212,8 +221,8 @@ class InteractiveMode:
     
     async def _interactive_follow_back(self, args: List[str]):
         """Interactive follow back command"""
-        # Get limit from args or use default
-        limit = 100
+        # Get limit from args (no default limit)
+        limit = None
         if args:
             try:
                 limit = int(args[0])
@@ -221,9 +230,13 @@ class InteractiveMode:
                     print(f"{Fore.RED}Limit must be a positive number{Style.RESET_ALL}")
                     return
             except ValueError:
-                print(f"{Fore.RED}Invalid limit: {args[0]}. Using default limit of 100{Style.RESET_ALL}")
+                print(f"{Fore.RED}Invalid limit: {args[0]}. No limit will be applied{Style.RESET_ALL}")
+                limit = None
         
-        print(f"{Fore.CYAN}Follow back limit: {limit}{Style.RESET_ALL}")
+        if limit is not None:
+            print(f"{Fore.CYAN}Follow back limit: {limit}{Style.RESET_ALL}")
+        else:
+            print(f"{Fore.CYAN}Follow back limit: No limit{Style.RESET_ALL}")
         
         # Use the commands instance to execute follow back
         commands = Commands(self.github_api, self.file_manager, self.logger)
@@ -490,8 +503,8 @@ class InteractiveMode:
             language = input(f"{Fore.CYAN}Programming language (optional): {Style.RESET_ALL}").strip()
             location = input(f"{Fore.CYAN}Location (optional): {Style.RESET_ALL}").strip()
             
-            limit_input = input(f"{Fore.CYAN}Result limit (default 50): {Style.RESET_ALL}").strip()
-            limit = int(limit_input) if limit_input else 50
+            limit_input = input(f"{Fore.CYAN}Result limit (no limit by default): {Style.RESET_ALL}").strip()
+            limit = int(limit_input) if limit_input else None
             
             # Import Commands class functionality
             from cli.commands import Commands

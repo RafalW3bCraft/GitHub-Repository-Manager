@@ -113,8 +113,8 @@ Author: RafalW3bCraft | License: MIT | GitHub: RafalW3bCraft/Github-Repository-M
         automation = repo_parser.add_argument_group('Automation Features')
         automation.add_argument('--auto-follow', type=str, metavar='USERNAME',
                               help='Auto-follow followers of specified user')
-        automation.add_argument('--limit', type=int, default=100,
-                              help='Maximum users to follow (default: 100)')
+        automation.add_argument('--limit', type=int, default=None,
+                              help='Maximum users to follow (no limit by default)')
         automation.add_argument('--filter-verified', action='store_true',
                               help='Only follow verified users')
         automation.add_argument('--min-followers', type=int, default=0,
@@ -124,8 +124,8 @@ Author: RafalW3bCraft | License: MIT | GitHub: RafalW3bCraft/Github-Repository-M
                               help='Unfollow users who don\'t follow back')
         automation.add_argument('--follow-back', action='store_true',
                               help='Follow back your followers who you haven\'t followed yet')
-        automation.add_argument('--follow-back-limit', type=int, default=100,
-                              help='Maximum users to follow back (default: 100)')
+        automation.add_argument('--follow-back-limit', type=int, default=None,
+                              help='Maximum users to follow back (no limit by default)')
         automation.add_argument('--whitelist', type=str,
                               help='Path to whitelist file (users to never unfollow)')
         automation.add_argument('--min-days', type=int, default=7,

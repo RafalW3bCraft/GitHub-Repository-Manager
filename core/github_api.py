@@ -34,7 +34,7 @@ class GitHubAPI:
         self._followers_cache = None
         self._following_cache = None
         self._cache_timestamp = 0
-        self._cache_ttl = 5   # Cache TTL in seconds - optimized for speed
+        self._cache_ttl = 10   # Cache TTL in seconds - shorter for better real-time accuracy
         
     async def _create_session(self) -> aiohttp.ClientSession:
         """Create configured aiohttp session"""
@@ -277,7 +277,8 @@ class GitHubAPI:
                 self._recently_followed.add(username)
                 self._recently_unfollowed.discard(username)
                 self._last_follow_operation_time = time.time()
-                # Do NOT invalidate cache - let cache-aware methods use local state
+                # Invalidate cache to force fresh data on next request
+                self._invalidate_cache()
                 return True
             elif response.status == 404:
                 self.logger.warning(f"User {username} not found")
@@ -301,7 +302,8 @@ class GitHubAPI:
                 self._recently_unfollowed.add(username)
                 self._recently_followed.discard(username)
                 self._last_follow_operation_time = time.time()
-                # Do NOT invalidate cache - let cache-aware methods use local state
+                # Invalidate cache to force fresh data on next request
+                self._invalidate_cache()
                 return True
             elif response.status == 404:
                 self.logger.warning(f"User {username} not found or not being followed")
@@ -346,6 +348,14 @@ class GitHubAPI:
         self._following_cache = None
         self._cache_timestamp = 0
         self.logger.debug("Cache invalidated")
+    
+    def force_refresh(self):
+        """Force complete refresh of all cached data and local state"""
+        self._invalidate_cache()
+        self._recently_followed.clear()
+        self._recently_unfollowed.clear()
+        self._last_follow_operation_time = 0
+        self.logger.debug("Forced complete refresh of cache and local state")
 
     def _is_cache_valid(self) -> bool:
         """Check if cache is still valid"""
@@ -355,11 +365,12 @@ class GitHubAPI:
     async def _clean_local_state(self):
         """Clean old local state entries after sufficient time has passed"""
         current_time = time.time()
-        # Clean state after 1 minute to prevent memory buildup and enable faster operations
-        if current_time - self._last_follow_operation_time > 60:
+        # Clean state after 2 minutes to preserve real-time stats but prevent stale data
+        if current_time - self._last_follow_operation_time > 120:
             self._recently_followed.clear()
             self._recently_unfollowed.clear()
-            self.logger.debug("Cleaned old local state entries")
+            self._invalidate_cache()  # Force fresh data when local state is cleaned
+            self.logger.debug("Cleaned old local state entries and invalidated cache")
 
     async def is_following_with_retry(self, username: str, max_retries: int = 3) -> bool:
         """Check if following with immediate retry logic for API consistency"""
@@ -379,6 +390,12 @@ class GitHubAPI:
             return result
         
         return result
+    
+    async def get_real_time_following_count(self) -> int:
+        """Get real-time following count with local state adjustments"""
+        # Get cached or fresh following data
+        following = await self.get_following()
+        return len(following)
     
     async def get_rate_limit_status(self) -> Dict[str, Any]:
         """Get current rate limit status"""

@@ -31,7 +31,7 @@ class Commands:
     
     # unfollow_from_list method removed as per revision requirements
     
-    async def auto_follow_followers(self, target_username: str, limit: int, 
+    async def auto_follow_followers(self, target_username: str, limit: Optional[int], 
                             filter_verified: bool, min_followers: int) -> int:
         """Auto-follow followers of a target user"""
         print(f"{Fore.CYAN}Getting followers of {target_username}...{Style.RESET_ALL}")
@@ -44,7 +44,8 @@ class Commands:
         
         print(f"{Fore.GREEN}Found {len(followers)} followers{Style.RESET_ALL}")
         
-        # Filter out users we're already following
+        # Filter out users we're already following - get fresh data
+        self.github_api._invalidate_cache()  # Force fresh data
         current_following = set(await self.github_api.get_following())
         candidates = [f for f in followers if f not in current_following]
         
@@ -78,8 +79,8 @@ class Commands:
             candidates = filtered_candidates
             print(f"{Fore.GREEN}After filtering: {len(candidates)} candidates{Style.RESET_ALL}")
         
-        # Apply limit
-        if len(candidates) > limit:
+        # Apply limit if specified
+        if limit is not None and len(candidates) > limit:
             candidates = candidates[:limit]
             print(f"{Fore.YELLOW}Limited to {limit} users{Style.RESET_ALL}")
         
@@ -93,11 +94,12 @@ class Commands:
         # Perform follows
         return await self._execute_follow_operation(candidates, f"auto-following followers of {target_username}")
     
-    async def follow_back_followers(self, limit: int = 100) -> int:
+    async def follow_back_followers(self, limit: Optional[int] = None) -> int:
         """Follow back users who are following you but you don't follow back"""
         print(f"{Fore.CYAN}Analyzing follow relationships for follow back...{Style.RESET_ALL}")
         
-        # Get current followers and following - use cache-aware methods that include local state
+        # Get current followers and following - force fresh data for accurate follow back
+        self.github_api._invalidate_cache()
         followers = set(await self.github_api.get_followers())
         following = set(await self.github_api.get_following())
         
@@ -123,8 +125,8 @@ class Commands:
         
         print(f"{Fore.YELLOW}Found {len(follow_back_candidates)} followers you haven't followed back{Style.RESET_ALL}")
         
-        # Apply limit
-        if len(follow_back_candidates) > limit:
+        # Apply limit if specified
+        if limit is not None and len(follow_back_candidates) > limit:
             follow_back_candidates = follow_back_candidates[:limit]
             print(f"{Fore.CYAN}Limited to {limit} users for follow back{Style.RESET_ALL}")
         
@@ -160,7 +162,8 @@ class Commands:
         """Unfollow users who don't follow back"""
         print(f"{Fore.CYAN}Analyzing follow relationships...{Style.RESET_ALL}")
         
-        # Get current following and followers
+        # Get current following and followers - force fresh data
+        self.github_api._invalidate_cache()
         following = set(await self.github_api.get_following())
         followers = set(await self.github_api.get_followers())
         
@@ -250,9 +253,24 @@ class Commands:
             print(f"{Fore.RED}Could not get user information for {target_user}{Style.RESET_ALL}")
             return 1
         
-        # Get follow data
+        # Force fresh data for stats to prevent repetitive/stale data
+        # Always invalidate cache for stats to ensure fresh data
+        self.github_api._invalidate_cache()
+        
+        # Get follow data (now fresh if cache was invalidated)
         followers = await self.github_api.get_followers(target_user)
         following = await self.github_api.get_following(target_user)
+        
+        # Apply local state adjustments for authenticated user's real-time stats
+        if target_user == self.github_api.username:
+            # Apply local state adjustments for real-time stats
+            following_set = set(following)
+            # Add recently followed users to following set
+            following_set.update(self.github_api._recently_followed)
+            # Remove recently unfollowed users from following set  
+            following_set.difference_update(self.github_api._recently_unfollowed)
+            # Convert back to list for consistent display
+            following = list(following_set)
         
         # Basic statistics
         print(f"\n{Fore.GREEN}=== Statistics for {target_user} ==={Style.RESET_ALL}")
@@ -276,19 +294,14 @@ class Commands:
             print(f"\n{Fore.CYAN}Detailed Analysis:{Style.RESET_ALL}")
             
             followers_set = set(followers)
-            following_set = set(following)
-            
-            # Apply local state adjustments for accurate real-time stats
-            # Add recently followed users to following set
-            following_set.update(self.github_api._recently_followed)
-            # Remove recently unfollowed users from following set
-            following_set.difference_update(self.github_api._recently_unfollowed)
+            following_set = set(following)  # This already includes real-time adjustments from above
             
             # Debug info for recently followed users
             if self.github_api._recently_followed:
                 recently_followed_count = len(self.github_api._recently_followed)
                 print(f"{Fore.YELLOW}[DEBUG] Recently followed: {recently_followed_count} users{Style.RESET_ALL}")
             
+            # Calculate relationships using real-time adjusted data
             mutual_follows = followers_set & following_set
             non_followers = following_set - followers_set
             not_following_back = followers_set - following_set
@@ -867,6 +880,12 @@ class Commands:
                             pbar.update(1)
                             continue
                         
+                        # Ensure result is a tuple with two elements
+                        if not isinstance(result, tuple) or len(result) != 2:
+                            failed += 1
+                            pbar.update(1)
+                            continue
+                        
                         username, success = result
                         pbar.set_postfix_str(f"Batch processed")
                         
@@ -923,6 +942,12 @@ class Commands:
                     # Process results
                     for result in results:
                         if isinstance(result, Exception):
+                            failed += 1
+                            pbar.update(1)
+                            continue
+                        
+                        # Ensure result is a tuple with two elements
+                        if not isinstance(result, tuple) or len(result) != 2:
                             failed += 1
                             pbar.update(1)
                             continue
@@ -1224,7 +1249,7 @@ class Commands:
             return 1
     
     async def search_users_advanced(self, min_followers: int = 100, min_repos: int = 5, 
-                             language: str = "", location: str = "", limit: int = 50) -> int:
+                             language: str = "", location: str = "", limit: Optional[int] = None) -> int:
         """Search users by followers, repositories, and other criteria"""
         print(f"{Fore.CYAN}Searching for users with advanced criteria...{Style.RESET_ALL}")
         print(f"  Min followers: {min_followers}")
@@ -1240,7 +1265,7 @@ class Commands:
                 min_repos=min_repos,
                 language=language,
                 location=location,
-                per_page=limit
+                per_page=limit or 100
             )
             
             if not users:
@@ -1329,8 +1354,7 @@ class Commands:
                     break
                 page += 1
                 if page > 10:  # Limit to prevent excessive API calls
-                    count = f"{count}+"
-                    break
+                    return 1000  # Return large number instead of string
             return count
         except Exception:
             return 0
@@ -1350,7 +1374,7 @@ class Commands:
                     language_count[language] = language_count.get(language, 0) + 1
             
             if language_count:
-                return max(language_count, key=language_count.get)
+                return max(language_count.keys(), key=lambda lang: language_count[lang])
             return ""
         except Exception as e:
             self.logger.debug(f"Error getting top language for {username}: {e}")
