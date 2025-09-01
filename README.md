@@ -1,6 +1,6 @@
 # Github-Repository-Manager
 
-A high-performance command-line tool for automating GitHub repository management and user operations. Built with strict asynchronous compliance for optimal performance.
+A ahigh-performance command-line tool for automating GitHub repository management and user operations. Built with strict asynchronous compliance for optimal performance.
 
 ## Features
 
