@@ -168,6 +168,9 @@ python github_automation.py repo-manager --auto-follow python-dev \
     --filter-verified \
     --limit 50
 
+# Auto-follow from list
+grep -v '^#' data/follow_list.txt | awk '{print $1}' | while read user; do   python github_automation.py repo-manager --auto-follow "$user" --limit 217; done
+
 # Cleanup non-followers
 python github_automation.py repo-manager --unfollow-nonfollowers \
     --whitelist ./data/whitelist.txt \
