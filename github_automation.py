@@ -128,8 +128,8 @@ Author: RafalW3bCraft | License: MIT | GitHub: RafalW3bCraft/Github-Repository-M
                               help='Maximum users to follow back (no limit by default)')
         automation.add_argument('--whitelist', type=str,
                               help='Path to whitelist file (users to never unfollow)')
-        automation.add_argument('--min-days', type=int, default=7,
-                              help='Minimum days since following (default: 7)')
+        automation.add_argument('--min-days', type=int, default=0,
+                              help='Minimum days since following (default: 0)')
         
         automation.add_argument('--stats', action='store_true',
                               help='Show follow/follower statistics')
