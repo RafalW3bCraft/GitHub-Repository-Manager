@@ -33,6 +33,10 @@ Create a `.env` file in the project root:
 ```bash
 GITHUB_TOKEN=your_github_token_here
 GITHUB_USERNAME=your_username
+
+# Optional: Rate limiting configuration
+FOLLOW_DELAY_SECONDS=1.5
+VERIFY_FOLLOWS=false
 ```
 
 ### GitHub Token Setup
@@ -41,6 +45,19 @@ GITHUB_USERNAME=your_username
    - `user:follow` (Required for follow/unfollow operations)
    - `repo` (Recommended for private repository access)
 3. Add the token to your `.env` file
+
+### Rate Limiting Configuration
+GitHub enforces secondary rate limits to prevent abuse. Configure these settings for optimal performance:
+
+- **FOLLOW_DELAY_SECONDS** (default: 1.5): Delay between follow requests in seconds
+  - Recommended: 1.5-2 seconds for normal use
+  - Use 2-3 seconds if experiencing high failure rates
+  - Too fast = triggers GitHub's abuse prevention (follows appear successful but don't actually work)
+
+- **VERIFY_FOLLOWS** (default: false): Verify each follow actually succeeded
+  - Set to `true` to confirm follows (uses extra API calls)
+  - Useful for debugging when success rate is unexpectedly low
+  - Helps identify when GitHub is silently blocking follows
 
 ## Usage
 
@@ -231,6 +248,26 @@ echo $GITHUB_TOKEN
 
 # Wait for reset or reduce operation frequency
 ```
+
+### Follow Operation Issues
+
+**Problem**: Many follows reported as successful but following count doesn't increase
+**Solution**: You're hitting GitHub's secondary rate limits (abuse prevention)
+- Increase `FOLLOW_DELAY_SECONDS` to 2-3 seconds
+- GitHub returns 204 (success) even when silently blocking follows
+- Enable `VERIFY_FOLLOWS=true` to detect this issue
+
+**Problem**: Getting 403 errors or "Forbidden" messages
+**Solution**: 
+- You're being rate limited by GitHub's abuse prevention
+- Increase delay between requests: `FOLLOW_DELAY_SECONDS=3`
+- Wait 1-2 hours before retrying bulk operations
+
+**Problem**: Script is too slow
+**Solution**: 
+- Default 1.5s delay is recommended for stability
+- You can try reducing to 1 second, but watch for failures
+- Never go below 1 second to avoid triggering abuse prevention
 
 ### Common Error Solutions
 

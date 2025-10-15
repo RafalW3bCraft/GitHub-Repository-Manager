@@ -80,6 +80,7 @@ class GitHubAPI:
                 self.logger.info("GitHub token validation successful")
                 return True
             else:
+                await response.read()
                 self.logger.error(f"Token validation failed: {response.status}")
                 return False
 
@@ -96,12 +97,15 @@ class GitHubAPI:
 
         try:
             response = await self._make_request('GET', '/user/repos', params={'per_page': 1, 'visibility': 'public'})
+            await response.read()
             permissions['can_read_public'] = response.status == 200
 
             response = await self._make_request('GET', '/user/repos', params={'per_page': 1, 'visibility': 'private'})
+            await response.read()
             permissions['can_read_private'] = response.status == 200
 
             response = await self._make_request('GET', '/user')
+            await response.read()
             if response.status == 200:
                 scopes = response.headers.get('X-OAuth-Scopes', '').split(', ')
                 scopes = [scope.strip() for scope in scopes if scope.strip()]
@@ -138,6 +142,7 @@ class GitHubAPI:
             if response.status == 200:
                 return await response.json()
             else:
+                await response.read()
                 self.logger.error(f"Failed to get user info for {username}: {response.status}")
                 return None
         except Exception as e:
@@ -163,6 +168,7 @@ class GitHubAPI:
                                             params={'per_page': per_page, 'page': page})
 
                 if response.status != 200:
+                    await response.read()
                     self.logger.error(f"Failed to get followers: {response.status}")
                     break
 
@@ -209,6 +215,7 @@ class GitHubAPI:
                                             params={'per_page': per_page, 'page': page})
 
                 if response.status != 200:
+                    await response.read()
                     self.logger.error(f"Failed to get following: {response.status}")
                     break
 
@@ -238,7 +245,14 @@ class GitHubAPI:
     async def follow_user(self, username: str) -> bool:
         try:
             response = await self._make_request('PUT', f'/user/following/{username}')
+            await response.read()
 
+            rate_limit_remaining = response.headers.get('X-RateLimit-Remaining')
+            retry_after = response.headers.get('Retry-After')
+            
+            if rate_limit_remaining:
+                self.logger.debug(f"Rate limit remaining: {rate_limit_remaining}")
+                
             if response.status == 204:
                 self.logger.info(f"Successfully followed {username}")
                 self._recently_followed.add(username)
@@ -246,6 +260,26 @@ class GitHubAPI:
                 self._last_follow_operation_time = time.time()
                 self._invalidate_cache()
                 return True
+            elif response.status == 403:
+                wait_time = 60
+                if retry_after:
+                    try:
+                        wait_time = int(retry_after)
+                    except ValueError:
+                        try:
+                            from email.utils import parsedate_to_datetime
+                            retry_date = parsedate_to_datetime(retry_after)
+                            wait_time = max(0, int((retry_date - datetime.now(retry_date.tzinfo)).total_seconds()))
+                        except Exception as e:
+                            self.logger.debug(f"Could not parse Retry-After '{retry_after}': {e}, using 60s fallback")
+                            wait_time = 60
+                    
+                    self.logger.warning(f"Rate limited for {username}. Waiting {wait_time}s as requested by GitHub")
+                else:
+                    self.logger.warning(f"Forbidden to follow {username} (secondary rate limit). Waiting {wait_time}s")
+                
+                await asyncio.sleep(wait_time)
+                return False
             elif response.status == 404:
                 self.logger.warning(f"User {username} not found")
                 return False
@@ -260,6 +294,7 @@ class GitHubAPI:
     async def unfollow_user(self, username: str) -> bool:
         try:
             response = await self._make_request('DELETE', f'/user/following/{username}')
+            await response.read()
 
             if response.status == 204:
                 self.logger.info(f"Successfully unfollowed {username}")
@@ -289,6 +324,7 @@ class GitHubAPI:
                 return False
 
             response = await self._make_request('GET', f'/user/following/{username}')
+            await response.read()
             return response.status == 204
         except Exception as e:
             self.logger.error(f"Error checking following status for {username}: {e}")
@@ -297,6 +333,7 @@ class GitHubAPI:
     async def is_follower(self, username: str) -> bool:
         try:
             response = await self._make_request('GET', f'/users/{username}/following/{self.username}')
+            await response.read()
             return response.status == 204
         except Exception as e:
             self.logger.error(f"Error checking follower status for {username}: {e}")
@@ -353,6 +390,7 @@ class GitHubAPI:
             if response.status == 200:
                 return await response.json()
             else:
+                await response.read()
                 return {}
         except Exception as e:
             self.logger.error(f"Error getting rate limit status: {e}")
@@ -389,6 +427,7 @@ class GitHubAPI:
                 response = await self._make_request('GET', endpoint, params=params)
 
                 if response.status != 200:
+                    await response.read()
                     self.logger.error(f"Failed to get repositories: {response.status}")
                     if response.status == 403:
                         self.logger.error("Insufficient permissions. Ensure token has 'repo' scope for private repositories")
@@ -422,6 +461,7 @@ class GitHubAPI:
             data = {'private': private}
             response = await self._make_request('PATCH', f'/repos/{self.username}/{repo_name}', 
                                         json=data)
+            await response.read()
 
             if response.status == 200:
                 visibility = "private" if private else "public"
@@ -458,6 +498,7 @@ class GitHubAPI:
                 self.logger.info(f"Successfully created repository: {name}")
                 return repo_data
             else:
+                await response.read()
                 self.logger.error(f"Failed to create repository {name}: {response.status}")
                 return None
 
@@ -500,6 +541,7 @@ class GitHubAPI:
                 self.logger.info(f"Found {len(users)} users matching criteria")
                 return users
             else:
+                await response.read()
                 self.logger.error(f"Failed to search users: {response.status}")
                 return []
 
@@ -540,6 +582,7 @@ class GitHubAPI:
                 self.logger.info(f"Found {len(repos)} repositories matching criteria")
                 return repos
             else:
+                await response.read()
                 self.logger.error(f"Failed to search repositories: {response.status}")
                 return []
 
@@ -592,6 +635,7 @@ class GitHubAPI:
                                             params={'per_page': per_page, 'page': page})
 
                 if response.status != 200:
+                    await response.read()
                     self.logger.error(f"Failed to get starred repos: {response.status}")
                     break
 

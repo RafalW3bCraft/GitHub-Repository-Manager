@@ -1,5 +1,6 @@
 import asyncio
 import time
+import os
 from typing import List, Dict, Any, Optional
 from pathlib import Path
 from datetime import datetime, timedelta
@@ -759,57 +760,61 @@ class Commands:
         failed = 0
         start_time = time.time()
 
-        batch_size = 25
-
-        async def follow_user_safe(username: str):
-            try:
-                result = await self.github_api.follow_user(username)
-                return username, result
-            except Exception as e:
-                self.logger.error(f"Error following {username}: {e}")
-                return username, False
+        delay_between_requests = float(os.getenv('FOLLOW_DELAY_SECONDS', '1.5'))
+        verify_follows = os.getenv('VERIFY_FOLLOWS', 'false').lower() == 'true'
+        
+        print(f"{Fore.CYAN}⏱️  Using {delay_between_requests}s delay between requests to respect GitHub rate limits{Style.RESET_ALL}")
+        if verify_follows:
+            print(f"{Fore.CYAN}✓ Follow verification enabled - will confirm each follow actually succeeded{Style.RESET_ALL}")
 
         with tqdm(total=len(usernames), desc=f"Following users ({operation_name})") as pbar:
-            for i in range(0, len(usernames), batch_size):
-                batch = usernames[i:i + batch_size]
-
+            for idx, username in enumerate(usernames):
                 try:
-                    tasks = [follow_user_safe(username) for username in batch]
-                    results = await asyncio.gather(*tasks, return_exceptions=True)
+                    result = await self.github_api.follow_user(username)
 
-                    for result in results:
-                        if isinstance(result, Exception):
-                            failed += 1
-                            pbar.update(1)
-                            continue
-
-                        if not isinstance(result, tuple) or len(result) != 2:
-                            failed += 1
-                            pbar.update(1)
-                            continue
-
-                        username, success = result
-                        pbar.set_postfix_str(f"Batch processed")
-
-                        if success:
+                    if result:
+                        if verify_follows:
+                            await asyncio.sleep(0.5)
+                            actually_following = await self.github_api.is_following(username)
+                            if actually_following:
+                                successful += 1
+                                print(f"{Fore.GREEN}✓ Followed {username} (verified){Style.RESET_ALL}")
+                            else:
+                                failed += 1
+                                print(f"{Fore.YELLOW}⚠️  API returned success but follow not confirmed for {username}{Style.RESET_ALL}")
+                        else:
                             successful += 1
                             print(f"{Fore.GREEN}✓ Followed {username}{Style.RESET_ALL}")
-                        else:
-                            failed += 1
-                            print(f"{Fore.RED}✗ Failed to follow {username}{Style.RESET_ALL}")
+                    else:
+                        failed += 1
+                        print(f"{Fore.RED}✗ Failed to follow {username} (rate limit cooldown applied){Style.RESET_ALL}")
 
-                        pbar.update(1)
+                    pbar.update(1)
+                    
+                    if idx < len(usernames) - 1:
+                        await asyncio.sleep(delay_between_requests)
 
                 except KeyboardInterrupt:
                     print(f"\n{Fore.YELLOW}Operation cancelled by user{Style.RESET_ALL}")
                     break
+                except Exception as e:
+                    self.logger.error(f"Error following {username}: {e}")
+                    failed += 1
+                    pbar.update(1)
+                    await asyncio.sleep(delay_between_requests)
 
         total_time = time.time() - start_time
         operations_per_second = len(usernames) / total_time if total_time > 0 else 0
 
         self._print_operation_summary(f"Auto-follow ({operation_name})", successful, failed, 0)
+        
         print(f"{Fore.CYAN}⚡ Performance: {operations_per_second:.1f} operations/second{Style.RESET_ALL}")
         print(f"{Fore.CYAN}⏱️  Total time: {total_time:.2f} seconds{Style.RESET_ALL}")
+        
+        if failed > 0 and not verify_follows:
+            print(f"{Fore.YELLOW}💡 Tip: Enable VERIFY_FOLLOWS=true to confirm follows actually succeed{Style.RESET_ALL}")
+            print(f"{Fore.YELLOW}💡 Tip: Increase FOLLOW_DELAY_SECONDS if hitting rate limits (current: {delay_between_requests}s){Style.RESET_ALL}")
+        
         return 0 if failed == 0 else 1
 
     async def _execute_unfollow_operation(self, usernames: List[str], operation_name: str) -> int:
