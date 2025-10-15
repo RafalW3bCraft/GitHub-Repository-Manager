@@ -1,7 +1,3 @@
-"""
-Interactive mode for Github-Repository-Manager
-"""
-
 import os
 import asyncio
 from datetime import datetime
@@ -17,42 +13,39 @@ from cli.commands import Commands
 from core.activity_generator import GitHubActivityGenerator
 
 class InteractiveMode:
-    """Interactive command-line interface"""
-    
+
     def __init__(self, github_api: GitHubAPI, file_manager: FileManager, logger: Logger):
         self.github_api = github_api
         self.file_manager = file_manager
         self.logger = logger
         self.running = True
-    
+
     async def start(self) -> int:
-        """Start interactive mode"""
         print(f"\n{Fore.CYAN}=== Github-Repository-Manager - Interactive Mode ==={Style.RESET_ALL}")
         print(f"Connected as: {Fore.GREEN}{self.github_api.username}{Style.RESET_ALL}")
         print(f"Type 'help' for available commands or 'quit' to exit\n")
-        
+
         while self.running:
             try:
                 command = input(f"{Fore.CYAN}github-automation> {Style.RESET_ALL}").strip()
-                
+
                 if not command:
                     continue
-                
+
                 await self._process_command(command)
-                
+
             except KeyboardInterrupt:
                 print(f"\n{Fore.YELLOW}Use 'quit' to exit{Style.RESET_ALL}")
             except EOFError:
                 print(f"\n{Fore.YELLOW}Goodbye!{Style.RESET_ALL}")
                 break
-        
+
         return 0
-    
+
     async def _process_command(self, command: str):
-        """Process interactive command"""
         parts = command.split()
         cmd = parts[0].lower()
-        
+
         if cmd == 'help':
             self._show_help()
         elif cmd == 'quit' or cmd == 'exit':
@@ -92,9 +85,8 @@ class InteractiveMode:
             os.system('clear' if os.name == 'posix' else 'cls')
         else:
             print(f"{Fore.RED}Unknown command: {cmd}. Type 'help' for available commands.{Style.RESET_ALL}")
-    
+
     def _show_help(self):
-        """Show help information"""
         help_text = f"""
 {Fore.CYAN}Available Commands:{Style.RESET_ALL}
 
@@ -114,14 +106,14 @@ class InteractiveMode:
 {Fore.GREEN}Bulk Operations:{Style.RESET_ALL}
   search followers <username>     Show followers of a user
   search following <username>     Show users followed by a user
-  
+
 {Fore.GREEN}Repository Management:{Style.RESET_ALL}
   create <name>           Create a new repository
   clone <url>             Clone a repository
-  
+
 {Fore.GREEN}User Search:{Style.RESET_ALL}
   users                   Search users by criteria
-  
+
 {Fore.GREEN}Data Management:{Style.RESET_ALL}
   backup                  Create backup of current state
   restore [backup_file]   Restore from backup file
@@ -143,26 +135,21 @@ class InteractiveMode:
   restore backup_20250830_063257.json
         """
         print(help_text)
-    
+
     async def _show_status(self):
-        """Show current API and rate limit status"""
         print(f"{Fore.CYAN}=== API Status ==={Style.RESET_ALL}")
-        
-        # Force fresh data for status
+
         self.github_api._invalidate_cache()
-        
-        # User info
+
         user_info = await self.github_api.get_user_info()
         if user_info:
             print(f"User: {user_info.get('name', 'N/A')} (@{user_info.get('login', 'N/A')})")
             print(f"Public Repos: {user_info.get('public_repos', 0)}")
             print(f"Followers: {user_info.get('followers', 0)}")
-            
-            # Use real-time following count with local state adjustments
+
             real_time_following = await self.github_api.get_real_time_following_count()
             print(f"Following: {real_time_following}")
-        
-        # Rate limit status
+
         rate_limit = await self.github_api.get_rate_limit_status()
         if rate_limit and 'rate' in rate_limit:
             remaining = rate_limit['rate'].get('remaining', 'N/A')
@@ -173,53 +160,43 @@ class InteractiveMode:
                 from datetime import datetime
                 reset_dt = datetime.fromtimestamp(reset_time)
                 print(f"Resets at: {reset_dt.strftime('%H:%M:%S')}")
-    
+
     async def _show_stats(self, args: List[str]):
-        """Show detailed statistics"""
-        # Use provided username or default to authenticated user
         username = args[0] if args else None
-        
-        # Force cache invalidation before showing stats to prevent repetitive data
+
         self.github_api._invalidate_cache()
-        
-        # Use the proper Commands class method for consistency
+
         commands = Commands(self.github_api, self.file_manager, self.logger)
-        
-        # Always show detailed stats for authenticated user, basic stats for others
+
         detailed = (username is None or username == self.github_api.username)
         await commands.show_statistics(username, detailed)
-    
+
     async def _interactive_follow(self, args: List[str]):
-        """Interactive follow command"""
         if not args:
             username = input(f"{Fore.CYAN}Username to follow: {Style.RESET_ALL}").strip()
         else:
             username = args[0]
-        
+
         if not username:
             print(f"{Fore.RED}Username required{Style.RESET_ALL}")
             return
-        
-        # Check if already following
+
         if await self.github_api.is_following(username):
             print(f"{Fore.YELLOW}Already following {username}{Style.RESET_ALL}")
             return
-        
-        # Get user info first
+
         user_info = await self.github_api.get_user_info(username)
         if not user_info:
             print(f"{Fore.RED}User {username} not found{Style.RESET_ALL}")
             return
-        
-        # Show user info
+
         print(f"\n{Fore.CYAN}User Information:{Style.RESET_ALL}")
         print(f"Name: {user_info.get('name', 'N/A')}")
         print(f"Bio: {user_info.get('bio', 'N/A')}")
         print(f"Followers: {user_info.get('followers', 0)}")
         print(f"Following: {user_info.get('following', 0)}")
         print(f"Public Repos: {user_info.get('public_repos', 0)}")
-        
-        # Confirm
+
         confirm = input(f"\n{Fore.CYAN}Follow {username}? (y/N): {Style.RESET_ALL}")
         if confirm.lower() == 'y':
             if await self.github_api.follow_user(username):
@@ -228,10 +205,8 @@ class InteractiveMode:
                 print(f"{Fore.RED}✗ Failed to follow {username}{Style.RESET_ALL}")
         else:
             print(f"{Fore.YELLOW}Follow cancelled{Style.RESET_ALL}")
-    
+
     async def _interactive_follow_back(self, args: List[str]):
-        """Interactive follow back command"""
-        # Get limit from args (no default limit)
         limit = None
         if args:
             try:
@@ -242,33 +217,29 @@ class InteractiveMode:
             except ValueError:
                 print(f"{Fore.RED}Invalid limit: {args[0]}. No limit will be applied{Style.RESET_ALL}")
                 limit = None
-        
+
         if limit is not None:
             print(f"{Fore.CYAN}Follow back limit: {limit}{Style.RESET_ALL}")
         else:
             print(f"{Fore.CYAN}Follow back limit: No limit{Style.RESET_ALL}")
-        
-        # Use the commands instance to execute follow back
+
         commands = Commands(self.github_api, self.file_manager, self.logger)
         await commands.follow_back_followers(limit)
-    
+
     async def _interactive_unfollow(self, args: List[str]):
-        """Interactive unfollow command"""
         if not args:
             username = input(f"{Fore.CYAN}Username to unfollow: {Style.RESET_ALL}").strip()
         else:
             username = args[0]
-        
+
         if not username:
             print(f"{Fore.RED}Username required{Style.RESET_ALL}")
             return
-        
-        # Check if currently following
+
         if not await self.github_api.is_following(username):
             print(f"{Fore.YELLOW}Not following {username}{Style.RESET_ALL}")
             return
-        
-        # Confirm
+
         confirm = input(f"{Fore.CYAN}Unfollow {username}? (y/N): {Style.RESET_ALL}")
         if confirm.lower() == 'y':
             if await self.github_api.unfollow_user(username):
@@ -277,26 +248,24 @@ class InteractiveMode:
                 print(f"{Fore.RED}✗ Failed to unfollow {username}{Style.RESET_ALL}")
         else:
             print(f"{Fore.YELLOW}Unfollow cancelled{Style.RESET_ALL}")
-    
+
     async def _interactive_check(self, args: List[str]):
-        """Check follow relationship with a user"""
         if not args:
             username = input(f"{Fore.CYAN}Username to check: {Style.RESET_ALL}").strip()
         else:
             username = args[0]
-        
+
         if not username:
             print(f"{Fore.RED}Username required{Style.RESET_ALL}")
             return
-        
-        # Check both directions
+
         following = await self.github_api.is_following(username)
         follower = await self.github_api.is_follower(username)
-        
+
         print(f"\n{Fore.CYAN}Relationship with {username}:{Style.RESET_ALL}")
         print(f"You follow them: {Fore.GREEN if following else Fore.RED}{'Yes' if following else 'No'}{Style.RESET_ALL}")
         print(f"They follow you: {Fore.GREEN if follower else Fore.RED}{'Yes' if follower else 'No'}{Style.RESET_ALL}")
-        
+
         if following and follower:
             print(f"{Fore.GREEN}✓ Mutual follow{Style.RESET_ALL}")
         elif following and not follower:
@@ -305,41 +274,38 @@ class InteractiveMode:
             print(f"{Fore.BLUE}ℹ They follow you, but you don't follow back{Style.RESET_ALL}")
         else:
             print(f"{Fore.RED}✗ No follow relationship{Style.RESET_ALL}")
-    
+
     async def _interactive_search(self, args: List[str]):
-        """Search followers/following"""
         if len(args) < 2:
             print(f"{Fore.RED}Usage: search <followers|following> <username>{Style.RESET_ALL}")
             return
-        
+
         search_type = args[0].lower()
         username = args[1]
-        
+
         if search_type not in ['followers', 'following']:
             print(f"{Fore.RED}Search type must be 'followers' or 'following'{Style.RESET_ALL}")
             return
-        
+
         print(f"{Fore.CYAN}Getting {search_type} for {username}...{Style.RESET_ALL}")
-        
+
         if search_type == 'followers':
             users = await self.github_api.get_followers(username)
         else:
             users = await self.github_api.get_following(username)
-        
+
         if not users:
             print(f"{Fore.YELLOW}No {search_type} found for {username}{Style.RESET_ALL}")
             return
-        
+
         print(f"\n{Fore.GREEN}Found {len(users)} {search_type}:{Style.RESET_ALL}")
-        
-        # Show first 20 users
+
         for i, user in enumerate(users[:20]):
             print(f"  {i+1:2d}. {user}")
-        
+
         if len(users) > 20:
             print(f"  ... and {len(users) - 20} more")
-        
-        # Option to save to file
+
         save = input(f"\n{Fore.CYAN}Save list to file? (y/N): {Style.RESET_ALL}")
         if save.lower() == 'y':
             filename = f"data/{username}_{search_type}.txt"
@@ -347,15 +313,14 @@ class InteractiveMode:
                 print(f"{Fore.GREEN}Saved to {filename}{Style.RESET_ALL}")
             else:
                 print(f"{Fore.RED}Failed to save file{Style.RESET_ALL}")
-    
+
     async def _interactive_backup(self):
-        """Interactive backup creation"""
         print(f"{Fore.CYAN}Creating backup of your current follow state...{Style.RESET_ALL}")
-        
+
         followers = await self.github_api.get_followers()
         following = await self.github_api.get_following()
         user_info = await self.github_api.get_user_info()
-        
+
         backup_data = {
             'user': {
                 'username': self.github_api.username,
@@ -369,32 +334,30 @@ class InteractiveMode:
                 'mutual_count': len(set(followers) & set(following))
             }
         }
-        
+
         backup_path = await self.file_manager.create_backup(backup_data)
         if backup_path:
             print(f"{Fore.GREEN}✓ Backup created: {backup_path}{Style.RESET_ALL}")
         else:
             print(f"{Fore.RED}✗ Failed to create backup{Style.RESET_ALL}")
-    
+
     async def _interactive_restore(self, args: List[str]):
-        """Interactive backup restore"""
         if not args:
-            # Show available backups and let user choose
             backups = await self.file_manager.list_backups()
             if not backups:
                 print(f"{Fore.YELLOW}No backups found{Style.RESET_ALL}")
                 return
-            
+
             print(f"\n{Fore.CYAN}Available backups:{Style.RESET_ALL}")
             for i, backup in enumerate(backups, 1):
                 print(f"  {i:2d}. {backup['name']} ({backup['size']}, {backup['modified']})")
-            
+
             try:
                 choice = input(f"\n{Fore.CYAN}Select backup number (or press Enter to cancel): {Style.RESET_ALL}").strip()
                 if not choice:
                     print(f"{Fore.YELLOW}Restore cancelled{Style.RESET_ALL}")
                     return
-                
+
                 backup_index = int(choice) - 1
                 if 0 <= backup_index < len(backups):
                     backup_file = backups[backup_index]['name']
@@ -406,48 +369,46 @@ class InteractiveMode:
                 return
         else:
             backup_file = args[0]
-        
-        # Use Commands class to perform restore
+
         from cli.commands import Commands
         commands = Commands(self.github_api, self.file_manager, self.logger)
         backup_path = f"backups/{backup_file}" if not backup_file.startswith('backups/') else backup_file
-        
+
         result = await commands.restore_backup(backup_path)
-        
+
         if result == 0:
             print(f"{Fore.GREEN}✓ Restore completed successfully{Style.RESET_ALL}")
         else:
             print(f"{Fore.RED}✗ Restore failed or was cancelled{Style.RESET_ALL}")
-    
+
     async def _interactive_list(self, args: List[str]):
-        """List various items"""
         if not args:
             print(f"{Fore.RED}Usage: list <backups|files>{Style.RESET_ALL}")
             return
-        
+
         list_type = args[0].lower()
-        
+
         if list_type == 'backups':
             backups = await self.file_manager.list_backups()
             if not backups:
                 print(f"{Fore.YELLOW}No backups found{Style.RESET_ALL}")
                 return
-            
+
             print(f"\n{Fore.CYAN}Available backups:{Style.RESET_ALL}")
             for i, backup in enumerate(backups, 1):
                 print(f"  {i:2d}. {backup['name']} ({backup['size']}, {backup['modified']})")
-        
+
         elif list_type == 'files':
             data_dir = self.file_manager.data_dir
             if not data_dir.exists():
                 print(f"{Fore.YELLOW}Data directory not found{Style.RESET_ALL}")
                 return
-            
+
             files = list(data_dir.glob("*.txt"))
             if not files:
                 print(f"{Fore.YELLOW}No data files found{Style.RESET_ALL}")
                 return
-            
+
             print(f"\n{Fore.CYAN}Data files:{Style.RESET_ALL}")
             for i, file_path in enumerate(files, 1):
                 try:
@@ -456,164 +417,148 @@ class InteractiveMode:
                     print(f"  {i:2d}. {file_path.name} ({lines} entries)")
                 except Exception as e:
                     print(f"  {i:2d}. {file_path.name} (error reading)")
-        
+
         else:
             print(f"{Fore.RED}Unknown list type: {list_type}{Style.RESET_ALL}")
-    
+
     async def _interactive_create_repo(self, args: List[str]):
-        """Interactive repository creation"""
         if not args:
             name = input(f"{Fore.CYAN}Repository name: {Style.RESET_ALL}").strip()
         else:
             name = args[0]
-        
+
         if not name:
             print(f"{Fore.RED}Repository name required{Style.RESET_ALL}")
             return
-        
+
         description = input(f"{Fore.CYAN}Description (optional): {Style.RESET_ALL}").strip()
-        
+
         private_input = input(f"{Fore.CYAN}Make private? (Y/n): {Style.RESET_ALL}").strip().lower()
         private = private_input != 'n'
-        
-        # Import Commands class functionality
+
         from cli.commands import Commands
         commands = Commands(self.github_api, self.file_manager, self.logger)
         await commands.create_repository(name, description, private)
-    
+
     async def _interactive_clone_repo(self, args: List[str]):
-        """Interactive repository cloning"""
         if not args:
             repo_url = input(f"{Fore.CYAN}Repository URL: {Style.RESET_ALL}").strip()
         else:
             repo_url = args[0]
-        
+
         if not repo_url:
             print(f"{Fore.RED}Repository URL required{Style.RESET_ALL}")
             return
-        
+
         local_path = input(f"{Fore.CYAN}Local path (optional): {Style.RESET_ALL}").strip()
-        
-        # Import Commands class functionality
+
         from cli.commands import Commands
         commands = Commands(self.github_api, self.file_manager, self.logger)
         await commands.clone_repository(repo_url, local_path)
-    
+
     async def _interactive_search_users(self, args: List[str]):
-        """Interactive user search"""
         print(f"{Fore.CYAN}Advanced User Search{Style.RESET_ALL}")
-        
+
         try:
             min_followers_input = input(f"{Fore.CYAN}Minimum followers (default 100): {Style.RESET_ALL}").strip()
             min_followers = int(min_followers_input) if min_followers_input else 100
-            
+
             min_repos_input = input(f"{Fore.CYAN}Minimum repositories (default 5): {Style.RESET_ALL}").strip()
             min_repos = int(min_repos_input) if min_repos_input else 5
-            
+
             language = input(f"{Fore.CYAN}Programming language (optional): {Style.RESET_ALL}").strip()
             location = input(f"{Fore.CYAN}Location (optional): {Style.RESET_ALL}").strip()
-            
+
             limit_input = input(f"{Fore.CYAN}Result limit (no limit by default): {Style.RESET_ALL}").strip()
             limit = int(limit_input) if limit_input else None
-            
-            # Import Commands class functionality
+
             from cli.commands import Commands
             commands = Commands(self.github_api, self.file_manager, self.logger)
             await commands.search_users_advanced(min_followers, min_repos, language, location, limit)
-            
+
         except ValueError:
             print(f"{Fore.RED}Invalid number input{Style.RESET_ALL}")
         except Exception as e:
             print(f"{Fore.RED}Error in user search: {e}{Style.RESET_ALL}")
-    
+
     async def _generate_activity(self, args: List[str]):
-        """Interactive GitHub activity generation"""
         try:
             print(f"\n{Fore.CYAN}=== GitHub Activity Generator ==={Style.RESET_ALL}")
-            
-            # Initialize activity generator
+
             generator = GitHubActivityGenerator(self.github_api, self.logger)
-            
-            # Get account creation date automatically
+
             account_creation_date = await generator.get_account_creation_date()
             print(f"Account created: {Fore.GREEN}{account_creation_date}{Style.RESET_ALL}")
-            
-            # Allow manual date input with smart defaults
+
             today = datetime.now().strftime('%Y-%m-%d')
-            
+
             start_date_input = input(f"{Fore.CYAN}Start date [{account_creation_date}]: {Style.RESET_ALL}").strip()
             start_date = start_date_input if start_date_input else account_creation_date
-            
+
             end_date_input = input(f"{Fore.CYAN}End date [{today}]: {Style.RESET_ALL}").strip()
             end_date = end_date_input if end_date_input else today
-            
+
             print(f"Generating activity from {Fore.GREEN}{start_date}{Style.RESET_ALL} to {Fore.GREEN}{end_date}{Style.RESET_ALL}")
-            
-            # Only ask for maximum commits per day
+
             max_commits_input = input(f"{Fore.CYAN}Maximum commits per day [10]: {Style.RESET_ALL}").strip()
             max_commits_per_day = int(max_commits_input) if max_commits_input else 10
-            
-            # Ask for repository name with default
+
             repo_name_input = input(f"{Fore.CYAN}Repository name [github_activity]: {Style.RESET_ALL}").strip()
             repo_name = repo_name_input if repo_name_input else "github_activity"
-            
-            # Validate inputs
+
             try:
                 start_dt = datetime.strptime(start_date, "%Y-%m-%d")
                 end_dt = datetime.strptime(end_date, "%Y-%m-%d")
-                
+
                 if start_dt > end_dt:
                     print(f"{Fore.RED}Error: Start date must be before end date{Style.RESET_ALL}")
                     return
-                
+
                 if max_commits_per_day < 3 or max_commits_per_day > 50:
                     print(f"{Fore.RED}Error: Maximum commits per day must be between 3 and 50{Style.RESET_ALL}")
                     return
-                    
+
             except ValueError:
                 print(f"{Fore.RED}Error: Invalid date format. Use YYYY-MM-DD{Style.RESET_ALL}")
                 return
-            
-            # Show confirmation
+
             total_days = (end_dt - start_dt).days + 1
             avg_commits = (3 + max_commits_per_day) // 2
             estimated_commits = total_days * avg_commits
-            
+
             print(f"\n{Fore.YELLOW}=== Confirmation ==={Style.RESET_ALL}")
             print(f"Date Range: {start_date} to {end_date} ({total_days} days)")
             print(f"Commits per day: 3 to {max_commits_per_day} (random)")
             print(f"Estimated total commits: ~{estimated_commits:,}")
             print(f"Repository: {Fore.GREEN}{repo_name}{Style.RESET_ALL}")
             print(f"Mode: Real-time generation (no dry run)")
-            
+
             confirm_input = input(f"\n{Fore.CYAN}Proceed with generation? (y/N): {Style.RESET_ALL}").strip().lower()
-            
+
             if confirm_input == 'y':
                 success = await generator.generate_activity(
                     start_date, end_date, max_commits_per_day, repo_name
                 )
-                
+
                 if success:
                     print(f"\n{Fore.GREEN}Activity generation completed successfully!{Style.RESET_ALL}")
                 else:
                     print(f"\n{Fore.RED}Activity generation failed. Check logs for details.{Style.RESET_ALL}")
             else:
                 print(f"{Fore.YELLOW}Activity generation cancelled.{Style.RESET_ALL}")
-                
+
         except ValueError as e:
             print(f"{Fore.RED}Invalid input: {e}{Style.RESET_ALL}")
         except Exception as e:
             print(f"{Fore.RED}Error in activity generation: {e}{Style.RESET_ALL}")
             self.logger.error(f"Activity generation error: {e}")
-    
+
     async def _activity_status(self):
-        """Show activity generation status"""
         try:
             print(f"\n{Fore.CYAN}=== Activity Status ==={Style.RESET_ALL}")
-            
-            # Check if github_activity repository exists
+
             response = await self.github_api._make_request('GET', f'/repos/{self.github_api.username}/github_activity')
-            
+
             if response.status == 200:
                 repo_data = await response.json()
                 print(f"{Fore.GREEN}✓ Repository 'github_activity' exists{Style.RESET_ALL}")
@@ -621,8 +566,7 @@ class InteractiveMode:
                 print(f"Created: {repo_data.get('created_at', 'N/A')}")
                 print(f"Updated: {repo_data.get('updated_at', 'N/A')}")
                 print(f"Size: {repo_data.get('size', 0)} KB")
-                
-                # Get latest commit info
+
                 commits_response = await self.github_api._make_request('GET', f'/repos/{self.github_api.username}/github_activity/commits')
                 if commits_response.status == 200:
                     commits_data = await commits_response.json()
@@ -630,11 +574,11 @@ class InteractiveMode:
                         latest_commit = commits_data[0]
                         print(f"Latest commit: {latest_commit.get('commit', {}).get('message', 'N/A')}")
                         print(f"Commit date: {latest_commit.get('commit', {}).get('author', {}).get('date', 'N/A')}")
-                
+
             else:
                 print(f"{Fore.YELLOW}Repository 'github_activity' does not exist{Style.RESET_ALL}")
                 print(f"Use 'generate-activity' to create activity history")
-                
+
         except Exception as e:
             print(f"{Fore.RED}Error checking activity status: {e}{Style.RESET_ALL}")
             self.logger.error(f"Activity status error: {e}")
